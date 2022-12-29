@@ -1,0 +1,46 @@
+---
+name: build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: ${{ github.repository == 'ReeganExE/rclone-patch' || github.event.inputs.manual }}
+    timeout-minutes: 60
+
+    runs-on: ubuntu-latest
+    env:
+      prepare: gpg -d --batch --yes --passphrase
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v3
+        with:
+          repository: rclone/rclone
+          path: rclone
+
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.19'
+
+      - name: Build
+        shell: bash
+        run: |
+          $prepare "${{ secrets.CONFIG }}" -o rclone/patch patch
+          $prepare "${{ secrets.CONFIG }}" -o clone f.conf
+          cd rclone
+          git apply patch
+          BUILD_FLAGS='-include "^linux/"' GOARCH=amd64 GOOS=linux make rclone
+          tar czf rclone.tgz rclone
+
+      - name: Rclone version
+        run: ./rclone/rclone version
+
+      - name: Rclone backup
+        run: |
+          ./rclone/rclone --config clone copy ./rclone/rclone.tgz system32:
+          rm clone patch
+        env:
+          RCLONE_CONFIG_PASS: ${{ secrets.RCLONE_CONFIG }}
